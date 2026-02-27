@@ -168,9 +168,16 @@
 
   /* Footer */
   footer{
-    text-align:center;padding:16px;color:var(--text2);font-size:12px;
-    border-top:1px solid var(--border);
+    text-align:center;padding:20px 16px;color:var(--text2);font-size:12px;
+    border-top:1px solid var(--border);display:flex;flex-direction:column;
+    align-items:center;gap:6px;
   }
+  footer .credit{opacity:.7;font-size:11px}
+  footer .credit a{
+    color:var(--text2);text-decoration:none;border-bottom:1px dotted var(--border);
+    transition:all .2s;
+  }
+  footer .credit a:hover{color:var(--accent);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -234,7 +241,8 @@
 </main>
 
 <footer>
-  md2pdf &mdash; Markdown to PDF, entirely in your browser. No uploads, no tracking.
+  <div>md2pdf &mdash; Markdown to PDF, entirely in your browser. No uploads, no tracking.</div>
+  <div class="credit">Built by <a href="https://ltdhonkoma.com" target="_blank" rel="noopener">株式会社honkoma</a> &mdash; ルーティンワークの自動化、お手伝いします</div>
 </footer>
 
 <div class="toast" id="toast"></div>
