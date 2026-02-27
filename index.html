@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>md2pdf - Markdown to PDF Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/14.1.3/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/styles/github.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f0f0f;--surface:#1a1a1a;--surface2:#242424;--border:#333;
+    --text:#e5e5e5;--text2:#999;--accent:#6c63ff;--accent2:#8b83ff;
+    --green:#34d399;--radius:10px;
+  }
+  body{
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+    background:var(--bg);color:var(--text);min-height:100vh;
+    display:flex;flex-direction:column;
+  }
+
+  /* Header */
+  header{
+    padding:20px 32px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--border);
+  }
+  .logo{font-size:22px;font-weight:700;letter-spacing:-0.5px}
+  .logo span{color:var(--accent)}
+  .badge{
+    font-size:11px;background:var(--surface2);color:var(--text2);
+    padding:4px 10px;border-radius:20px;border:1px solid var(--border);
+  }
+
+  /* Main layout */
+  main{flex:1;display:flex;flex-direction:column;padding:24px 32px;gap:20px}
+
+  /* Drop zone */
+  .drop-zone{
+    border:2px dashed var(--border);border-radius:var(--radius);
+    padding:48px 24px;text-align:center;cursor:pointer;
+    transition:all .2s;position:relative;
+    background:var(--surface);
+  }
+  .drop-zone:hover,.drop-zone.dragover{
+    border-color:var(--accent);background:rgba(108,99,255,.06);
+  }
+  .drop-zone h2{font-size:18px;margin-bottom:8px;font-weight:600}
+  .drop-zone p{color:var(--text2);font-size:14px}
+  .drop-zone input{
+    position:absolute;inset:0;opacity:0;cursor:pointer;
+  }
+  .file-info{
+    display:none;align-items:center;gap:12px;padding:12px 16px;
+    background:var(--surface2);border-radius:8px;margin-top:16px;
+    justify-content:center;
+  }
+  .file-info.show{display:inline-flex}
+  .file-info .name{font-weight:600;font-size:14px}
+  .file-info .size{color:var(--text2);font-size:12px}
+  .file-info .remove{
+    background:none;border:none;color:var(--text2);cursor:pointer;
+    font-size:18px;line-height:1;padding:0 4px;
+  }
+  .file-info .remove:hover{color:#f87171}
+
+  /* Settings bar */
+  .settings{
+    display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+  }
+  .settings label{
+    font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px;
+  }
+  .settings select,.settings input[type="text"]{
+    background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    padding:6px 10px;border-radius:6px;font-size:13px;
+  }
+  .settings select:focus,.settings input[type="text"]:focus{
+    outline:none;border-color:var(--accent);
+  }
+
+  /* Preview area */
+  .preview-container{
+    flex:1;display:none;flex-direction:column;gap:12px;min-height:0;
+  }
+  .preview-container.show{display:flex}
+  .preview-header{
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .preview-header h3{font-size:15px;font-weight:600}
+  .btn-group{display:flex;gap:8px}
+
+  .btn{
+    padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;
+    cursor:pointer;border:none;transition:all .15s;
+  }
+  .btn-primary{
+    background:var(--accent);color:#fff;
+  }
+  .btn-primary:hover{background:var(--accent2);transform:translateY(-1px)}
+  .btn-secondary{
+    background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  }
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  .preview-frame{
+    flex:1;border:1px solid var(--border);border-radius:var(--radius);
+    overflow:auto;background:#fff;min-height:500px;
+  }
+  .preview-frame .content{
+    padding:40px 48px;color:#1a1a1a;font-size:15px;line-height:1.7;
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",serif;
+    max-width:800px;margin:0 auto;
+  }
+
+  /* Markdown rendered styles inside preview */
+  .content h1{font-size:24px;border-bottom:2px solid #222;padding-bottom:6px;margin:28px 0 14px}
+  .content h2{font-size:20px;border-bottom:1px solid #ccc;padding-bottom:4px;margin:24px 0 12px}
+  .content h3{font-size:16px;margin:18px 0 8px}
+  .content p{margin:10px 0}
+  .content ul,.content ol{padding-left:24px;margin:8px 0}
+  .content li{margin:4px 0}
+  .content code{
+    background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;
+    font-family:"SF Mono",Menlo,monospace;
+  }
+  .content pre{
+    background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;
+    padding:14px 18px;overflow-x:auto;margin:12px 0;
+  }
+  .content pre code{background:none;padding:0;font-size:12.5px}
+  .content hr{border:none;border-top:1px solid #ddd;margin:24px 0}
+  .content a{color:#4f46e5}
+  .content strong{font-weight:700}
+  .content blockquote{
+    border-left:3px solid #d1d5db;padding-left:14px;color:#6b7280;margin:12px 0;
+  }
+  .content table{border-collapse:collapse;margin:12px 0;width:100%}
+  .content th,.content td{border:1px solid #d1d5db;padding:8px 12px;text-align:left;font-size:14px}
+  .content th{background:#f3f4f6;font-weight:600}
+  .content input[type="checkbox"]{margin-right:6px}
+
+  /* Toast */
+  .toast{
+    position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;
+    padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;
+    opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;
+    z-index:999;
+  }
+  .toast.show{opacity:1;transform:translateY(0)}
+
+  /* Loading spinner */
+  .spinner{
+    display:inline-block;width:16px;height:16px;
+    border:2px solid rgba(255,255,255,.3);border-top-color:#fff;
+    border-radius:50%;animation:spin .6s linear infinite;
+    margin-right:6px;vertical-align:middle;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Responsive */
+  @media(max-width:640px){
+    header,main{padding:16px}
+    .preview-frame .content{padding:24px 20px}
+  }
+
+  /* Footer */
+  footer{
+    text-align:center;padding:16px;color:var(--text2);font-size:12px;
+    border-top:1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">md<span>2</span>pdf</div>
+  <div class="badge">100% client-side</div>
+</header>
+
+<main>
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".md,.markdown,.txt">
+    <h2>Drop your .md file here</h2>
+    <p>or click to browse &mdash; your file never leaves your browser</p>
+    <div class="file-info" id="fileInfo">
+      <span class="name" id="fileName"></span>
+      <span class="size" id="fileSize"></span>
+      <button class="remove" id="removeFile" title="Remove">&times;</button>
+    </div>
+  </div>
+
+  <div class="settings">
+    <label>
+      Paper
+      <select id="paperSize">
+        <option value="a4" selected>A4</option>
+        <option value="letter">Letter</option>
+        <option value="legal">Legal</option>
+      </select>
+    </label>
+    <label>
+      Font size
+      <select id="fontSize">
+        <option value="13">Small (13px)</option>
+        <option value="15" selected>Medium (15px)</option>
+        <option value="17">Large (17px)</option>
+      </select>
+    </label>
+    <label>
+      Margin
+      <select id="margin">
+        <option value="10">Narrow</option>
+        <option value="15" selected>Normal</option>
+        <option value="25">Wide</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="preview-container" id="previewContainer">
+    <div class="preview-header">
+      <h3>Preview</h3>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="copyHtmlBtn">Copy HTML</button>
+        <button class="btn btn-primary" id="downloadBtn">Download PDF</button>
+      </div>
+    </div>
+    <div class="preview-frame">
+      <div class="content" id="previewContent"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  md2pdf &mdash; Markdown to PDF, entirely in your browser. No uploads, no tracking.
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const removeFile = document.getElementById('removeFile');
+const previewContainer = document.getElementById('previewContainer');
+const previewContent = document.getElementById('previewContent');
+const downloadBtn = document.getElementById('downloadBtn');
+const copyHtmlBtn = document.getElementById('copyHtmlBtn');
+const toast = document.getElementById('toast');
+const paperSize = document.getElementById('paperSize');
+const fontSizeSelect = document.getElementById('fontSize');
+const marginSelect = document.getElementById('margin');
+
+let currentMarkdown = '';
+let currentFileName = '';
+
+// Configure marked
+marked.setOptions({
+  highlight: function(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      return hljs.highlight(code, { language: lang }).value;
+    }
+    return hljs.highlightAuto(code).value;
+  },
+  breaks: true,
+  gfm: true,
+});
+
+// Drag and drop
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('dragover');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+});
+
+removeFile.addEventListener('click', (e) => {
+  e.stopPropagation();
+  resetState();
+});
+
+function resetState() {
+  currentMarkdown = '';
+  currentFileName = '';
+  fileInput.value = '';
+  fileInfo.classList.remove('show');
+  previewContainer.classList.remove('show');
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function handleFile(file) {
+  currentFileName = file.name.replace(/\.(md|markdown|txt)$/i, '');
+  fileName.textContent = file.name;
+  fileSize.textContent = formatBytes(file.size);
+  fileInfo.classList.add('show');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    currentMarkdown = e.target.result;
+    renderPreview();
+  };
+  reader.readAsText(file);
+}
+
+function renderPreview() {
+  const html = marked.parse(currentMarkdown);
+  previewContent.innerHTML = html;
+  previewContent.style.fontSize = fontSizeSelect.value + 'px';
+  previewContainer.classList.add('show');
+
+  // Apply syntax highlighting to code blocks
+  previewContent.querySelectorAll('pre code').forEach((el) => {
+    hljs.highlightElement(el);
+  });
+}
+
+// Re-render on settings change
+fontSizeSelect.addEventListener('change', () => {
+  if (currentMarkdown) renderPreview();
+});
+
+// Download PDF
+downloadBtn.addEventListener('click', async () => {
+  if (!currentMarkdown) return;
+
+  downloadBtn.disabled = true;
+  downloadBtn.innerHTML = '<span class="spinner"></span>Generating...';
+
+  const marginVal = parseInt(marginSelect.value);
+  const paper = paperSize.value;
+
+  // Build a clean element for PDF
+  const el = document.createElement('div');
+  el.innerHTML = previewContent.innerHTML;
+  el.style.cssText = `
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: ${fontSizeSelect.value}px;
+    line-height: 1.7;
+    color: #1a1a1a;
+  `;
+
+  // Copy styles inline
+  const styleTag = document.createElement('style');
+  styleTag.textContent = `
+    h1{font-size:24px;border-bottom:2px solid #222;padding-bottom:6px;margin:28px 0 14px}
+    h2{font-size:20px;border-bottom:1px solid #ccc;padding-bottom:4px;margin:24px 0 12px}
+    h3{font-size:16px;margin:18px 0 8px}
+    p{margin:10px 0}
+    ul,ol{padding-left:24px;margin:8px 0}
+    li{margin:4px 0}
+    code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;font-family:"SF Mono",Menlo,monospace}
+    pre{background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px;padding:14px 18px;overflow-x:auto;margin:12px 0;page-break-inside:avoid}
+    pre code{background:none;padding:0;font-size:12.5px}
+    hr{border:none;border-top:1px solid #ddd;margin:24px 0}
+    a{color:#4f46e5;text-decoration:none}
+    strong{font-weight:700}
+    blockquote{border-left:3px solid #d1d5db;padding-left:14px;color:#6b7280;margin:12px 0}
+    table{border-collapse:collapse;margin:12px 0;width:100%}
+    th,td{border:1px solid #d1d5db;padding:8px 12px;text-align:left;font-size:14px}
+    th{background:#f3f4f6;font-weight:600}
+    input[type="checkbox"]{margin-right:6px}
+    .hljs-keyword,.hljs-selector-tag,.hljs-built_in{color:#8250df}
+    .hljs-string,.hljs-attr{color:#0a3069}
+    .hljs-comment{color:#6a737d}
+    .hljs-number{color:#0550ae}
+    .hljs-title,.hljs-function{color:#8250df}
+  `;
+  el.prepend(styleTag);
+
+  const jsPDF = window.jspdf;
+
+  const opt = {
+    margin: marginVal,
+    filename: currentFileName + '.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+    jsPDF: {
+      unit: 'mm',
+      format: paper,
+      orientation: 'portrait',
+    },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+  };
+
+  try {
+    await html2pdf().set(opt).from(el).save();
+    showToast('PDF downloaded!');
+  } catch (err) {
+    console.error(err);
+    showToast('Error generating PDF');
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = 'Download PDF';
+  }
+});
+
+// Copy HTML
+copyHtmlBtn.addEventListener('click', () => {
+  if (!currentMarkdown) return;
+  const html = marked.parse(currentMarkdown);
+  navigator.clipboard.writeText(html).then(() => {
+    showToast('HTML copied to clipboard');
+  });
+});
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
